@@ -1,5 +1,13 @@
 package ui
 
+import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.animation.core.tween
+import androidx.compose.foundation.hoverable
+import androidx.compose.foundation.interaction.MutableInteractionSource
+import androidx.compose.foundation.interaction.collectIsHoveredAsState
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.drawWithContent
+import androidx.compose.ui.graphics.Shape
 import app.Project
 import androidx.compose.foundation.VerticalScrollbar
 import androidx.compose.foundation.background
@@ -23,13 +31,13 @@ import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.rememberScrollbarAdapter
 import androidx.compose.foundation.verticalScroll
-import androidx.compose.material3.Button
-import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
@@ -72,7 +80,7 @@ fun RootsBar(roots: List<Path>, onAdd: () -> Unit, onRemove: (Path) -> Unit) {
                         "  ✕",
                         color = Theme.textDim,
                         fontSize = 12.sp,
-                        modifier = Modifier.clickable { onRemove(root) }.padding(2.dp),
+                        modifier = Modifier.hoverClick(Theme.chipShape) { onRemove(root) }.padding(2.dp),
                     )
                 }
             }
@@ -118,7 +126,7 @@ fun ProjectList(
                                     if (isSelected) Theme.selectedGradient else Theme.clearGradient,
                                     Theme.chipShape,
                                 )
-                                .clickable { onSelect(project) }
+                                .hoverClick(Theme.chipShape) { onSelect(project) }
                                 .padding(8.dp),
                         ) {
                             Text(
@@ -196,7 +204,7 @@ fun DetailsPanel(
                             if (isSelected) Theme.selectedGradient else Theme.clearGradient,
                             Theme.chipShape,
                         )
-                        .clickable { onSelectBackup(if (isSelected) null else backup) }
+                        .hoverClick(Theme.chipShape) { onSelectBackup(if (isSelected) null else backup) }
                         .padding(horizontal = 8.dp, vertical = 6.dp),
                 ) {
                     Text(
@@ -217,21 +225,41 @@ fun DetailsPanel(
     }
 }
 
+/** Clickable with the default desktop rectangle indication removed; smooth brightening on hover. */
+@Composable
+fun Modifier.hoverClick(shape: Shape, onClick: () -> Unit): Modifier {
+    val source = remember { MutableInteractionSource() }
+    val hovered by source.collectIsHoveredAsState()
+    val alpha by animateFloatAsState(if (hovered) 0.10f else 0f, tween(120))
+    return this
+        .clip(shape)
+        .hoverable(source)
+        .clickable(interactionSource = source, indication = null, onClick = onClick)
+        .drawWithContent {
+            drawContent()
+            if (alpha > 0f) drawRect(Color.White.copy(alpha = alpha))
+        }
+}
+
 @Composable
 fun GradientButton(text: String, enabled: Boolean = true, modifier: Modifier = Modifier, onClick: () -> Unit) {
-    Button(
-        onClick = onClick,
-        enabled = enabled,
-        shape = Theme.buttonShape,
-        colors = ButtonDefaults.buttonColors(
-            containerColor = Color.Transparent,
-            contentColor = Theme.text,
-            disabledContainerColor = Color.Transparent,
-            disabledContentColor = Theme.textDim,
-        ),
-        modifier = modifier.background(if (enabled) Theme.accentGradient else Theme.clearGradient, Theme.buttonShape),
+    val source = remember { MutableInteractionSource() }
+    val hovered by source.collectIsHoveredAsState()
+    val alpha by animateFloatAsState(if (enabled && hovered) 0.18f else 0f, tween(120))
+    Box(
+        modifier = modifier
+            .clip(Theme.buttonShape)
+            .background(if (enabled) Theme.accentGradient else Theme.clearGradient)
+            .hoverable(source, enabled = enabled)
+            .clickable(interactionSource = source, indication = null, enabled = enabled, onClick = onClick)
+            .drawWithContent {
+                drawContent()
+                if (alpha > 0f) drawRect(Color.White.copy(alpha = alpha))
+            }
+            .padding(horizontal = 18.dp, vertical = 8.dp),
+        contentAlignment = Alignment.Center,
     ) {
-        Text(text, fontSize = 13.sp)
+        Text(text, fontSize = 13.sp, color = if (enabled) Theme.text else Theme.textDim)
     }
 }
 
