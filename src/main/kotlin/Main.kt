@@ -101,6 +101,8 @@ fun main() = application {
         }
     }
 
+    fun persistRoots() = Prefs.saveRoots(roots.map { it.toString() })
+
     fun addRoot(parent: java.awt.Window?) {
         val chooser = JFileChooser().apply {
             fileSelectionMode = JFileChooser.DIRECTORIES_ONLY
@@ -111,6 +113,7 @@ fun main() = application {
         } else null
         if (chosen != null && chosen !in roots) {
             roots.add(chosen)
+            persistRoots()
             rescan()
         }
     }
@@ -175,7 +178,7 @@ fun main() = application {
                 RootsBar(
                     roots = roots.toList(),
                     onAdd = { addRoot(window) },
-                    onRemove = { r -> roots.remove(r); rescan() },
+                    onRemove = { r -> roots.remove(r); persistRoots(); rescan() },
                 )
                 Row(
                     Modifier.weight(1f).fillMaxWidth().padding(12.dp),
@@ -224,7 +227,8 @@ fun main() = application {
     }
 
     LaunchedEffect(Unit) {
-        if (roots.isEmpty()) roots.add(Path.of(System.getProperty("user.home")))
+        val saved = Prefs.loadRoots().map { runCatching { Path.of(it) }.getOrNull() }.filterNotNull()
+        if (saved.isEmpty()) roots.add(Path.of(System.getProperty("user.home"))) else roots.addAll(saved)
         rescan()
     }
 }
