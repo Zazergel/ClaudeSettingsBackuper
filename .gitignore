@@ -5,3 +5,11 @@
 .beads-credential-key
 .beads/proxieddb/
 *.gate.lock*
+
+# Gradle / Kotlin / IDEA
+.gradle/
+build/
+out/
+.idea/
+*.iml
+.kotlin/
