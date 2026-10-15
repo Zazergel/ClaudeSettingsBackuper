@@ -39,6 +39,7 @@ import ui.AppTheme
 import ui.ConsentDialog
 import ui.CurrentInfo
 import ui.DetailsPanel
+import ui.HiddenDialog
 import ui.ProjectList
 import ui.RootsBar
 import ui.Theme
@@ -56,11 +57,13 @@ fun main() = application {
     val roots = remember { mutableStateListOf<Path>() }
     val projects = remember { mutableStateListOf<Project>() }
     val backups = remember { mutableStateListOf<Path>() }
+    val hidden = remember { mutableStateListOf<Path>() }
     var selected by remember { mutableStateOf<Project?>(null) }
     var selectedBackup by remember { mutableStateOf<Path?>(null) }
     var current by remember { mutableStateOf<CurrentInfo?>(null) }
     var scanning by remember { mutableStateOf(false) }
     var showAbout by remember { mutableStateOf(false) }
+    var showHidden by remember { mutableStateOf(false) }
     var pendingRestore by remember { mutableStateOf<Path?>(null) }
 
     fun reloadDetails(p: Project?) {
@@ -102,6 +105,21 @@ fun main() = application {
     }
 
     fun persistRoots() = Prefs.saveRoots(roots.map { it.toString() })
+
+    fun persistHidden() = Prefs.saveHidden(hidden.map { it.toString() })
+
+    fun hideProject(p: Project) {
+        if (p.root !in hidden) {
+            hidden.add(p.root)
+            persistHidden()
+        }
+        if (selected == p) reloadDetails(null)
+    }
+
+    fun unhideProject(root: Path) {
+        hidden.remove(root)
+        persistHidden()
+    }
 
     fun addRoot(parent: java.awt.Window?) {
         val chooser = JFileChooser().apply {
@@ -153,6 +171,7 @@ fun main() = application {
             Menu("Файл") {
                 Item("Добавить папку сканирования") { addRoot(window) }
                 Item("Обновить") { rescan() }
+                Item("Скрытые проекты...") { showHidden = true }
                 Separator()
                 Item("Выход") { exitApplication() }
             }
@@ -185,10 +204,12 @@ fun main() = application {
                     horizontalArrangement = Arrangement.spacedBy(12.dp),
                 ) {
                     ProjectList(
-                        projects = projects.toList(),
+                        projects = projects.toList().filter { it.root !in hidden },
                         selected = selected,
                         scanning = scanning,
                         onSelect = ::reloadDetails,
+                        onHide = ::hideProject,
+                        hiddenCount = hidden.size,
                         modifier = Modifier.width(340.dp).fillMaxHeight(),
                     )
                     DetailsPanel(
@@ -205,6 +226,11 @@ fun main() = application {
             }
         }
         if (showAbout) AboutDialog { showAbout = false }
+        if (showHidden) HiddenDialog(
+            paths = hidden.toList(),
+            onRestore = ::unhideProject,
+            onClose = { showHidden = false },
+        )
         pendingRestore?.let { b ->
             ConsentDialog(onChoice = { choice ->
                 pendingRestore = null
@@ -229,6 +255,7 @@ fun main() = application {
     LaunchedEffect(Unit) {
         val saved = Prefs.loadRoots().map { runCatching { Path.of(it) }.getOrNull() }.filterNotNull()
         if (saved.isEmpty()) roots.add(Path.of(System.getProperty("user.home"))) else roots.addAll(saved)
+        hidden.addAll(Prefs.loadHidden().map { runCatching { Path.of(it) }.getOrNull() }.filterNotNull())
         rescan()
     }
 }

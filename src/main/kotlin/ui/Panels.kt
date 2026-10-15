@@ -25,6 +25,7 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.rememberLazyListState
@@ -95,6 +96,8 @@ fun ProjectList(
     selected: Project?,
     scanning: Boolean,
     onSelect: (Project) -> Unit,
+    onHide: (Project) -> Unit = {},
+    hiddenCount: Int = 0,
     modifier: Modifier = Modifier,
 ) {
     Card(modifier, shape = Theme.cardShape, colors = CardDefaults.cardColors(containerColor = Theme.card)) {
@@ -104,6 +107,13 @@ fun ProjectList(
                 if (scanning) CircularProgressIndicator(Modifier.size(16.dp), color = Theme.accent, strokeWidth = 2.dp)
             }
             Spacer(Modifier.height(8.dp))
+            if (hiddenCount > 0) {
+                Text(
+                    "Скрыто проектов: " + hiddenCount + " (Файл -> Скрытые проекты)",
+                    color = Theme.textDim, fontSize = 11.sp,
+                )
+                Spacer(Modifier.height(4.dp))
+            }
             if (projects.isEmpty()) {
                 Text(
                     if (scanning) "Сканирую" else "Проекты не найдены. Добавьте папку сканирования.",
@@ -119,27 +129,47 @@ fun ProjectList(
                     ) {
                     items(projects, key = { it.root.toString() }) { project ->
                         val isSelected = project == selected
-                        Column(
+                        val rowSource = remember { MutableInteractionSource() }
+                        val rowHovered by rowSource.collectIsHoveredAsState()
+                        val rowAlpha by animateFloatAsState(if (rowHovered) 0.10f else 0f, tween(120))
+                        Box(
                             Modifier
                                 .fillMaxWidth()
-                                .background(
-                                    if (isSelected) Theme.selectedGradient else Theme.clearGradient,
-                                    Theme.chipShape,
-                                )
-                                .hoverClick(Theme.chipShape) { onSelect(project) }
+                                .clip(Theme.chipShape)
+                                .background(if (isSelected) Theme.selectedGradient else Theme.clearGradient)
+                                .hoverable(rowSource)
+                                .clickable(interactionSource = rowSource, indication = null) { onSelect(project) }
+                                .drawWithContent {
+                                    drawContent()
+                                    if (rowAlpha > 0f) drawRect(Color.White.copy(alpha = rowAlpha))
+                                }
                                 .padding(8.dp),
                         ) {
-                            Text(
-                                project.root.fileName.toString(),
-                                color = if (isSelected) Theme.accent2 else Theme.text,
-                                fontSize = 13.sp, fontWeight = FontWeight.Medium,
-                                maxLines = 1, overflow = TextOverflow.Ellipsis,
-                            )
-                            Text(
-                                project.root.parent?.toString() ?: "",
-                                color = Theme.textDim, fontSize = 11.sp,
-                                maxLines = 1, overflow = TextOverflow.Ellipsis,
-                            )
+                            Column(Modifier.widthIn(max = 240.dp)) {
+                                Text(
+                                    project.root.fileName.toString(),
+                                    color = if (isSelected) Theme.accent2 else Theme.text,
+                                    fontSize = 13.sp, fontWeight = FontWeight.Medium,
+                                    maxLines = 1, overflow = TextOverflow.Ellipsis,
+                                )
+                                Text(
+                                    project.root.parent?.toString() ?: "",
+                                    color = Theme.textDim, fontSize = 11.sp,
+                                    maxLines = 1, overflow = TextOverflow.Ellipsis,
+                                )
+                            }
+                            if (rowHovered) {
+                                val hideSource = remember { MutableInteractionSource() }
+                                Text(
+                                    "Скрыть",
+                                    color = Theme.textDim, fontSize = 11.sp,
+                                    modifier = Modifier
+                                        .align(Alignment.CenterEnd)
+                                        .clip(Theme.chipShape)
+                                        .clickable(interactionSource = hideSource, indication = null) { onHide(project) }
+                                        .padding(4.dp),
+                                )
+                            }
                         }
                     }
                     }
