@@ -36,6 +36,7 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import ui.AboutDialog
 import ui.AppTheme
+import ui.ConsentDialog
 import ui.CurrentInfo
 import ui.DetailsPanel
 import ui.ProjectList
@@ -60,6 +61,7 @@ fun main() = application {
     var current by remember { mutableStateOf<CurrentInfo?>(null) }
     var scanning by remember { mutableStateOf(false) }
     var showAbout by remember { mutableStateOf(false) }
+    var pendingRestore by remember { mutableStateOf<Path?>(null) }
 
     fun reloadDetails(p: Project?) {
         selected = p
@@ -121,12 +123,21 @@ fun main() = application {
         }
     }
 
-    fun doRestore() {
+    fun doRestore(b: Path) {
         val p = selected ?: return
-        val b = selectedBackup ?: return
         scope.launch(Dispatchers.IO) {
             runCatching { BackupEngine.restore(b, p.settings) }
             reloadDetails(p)
+        }
+    }
+
+    /** R6 gate: direct restore only when safe (no current file, or backups exist). */
+    fun requestRestore(b: Path) {
+        val p = selected ?: return
+        when (decideRestore(p.settings)) {
+            RestoreChoice.PROCEED -> doRestore(b)
+            RestoreChoice.BACKUP_THEN_RESTORE, RestoreChoice.CANCEL -> {}
+            null -> pendingRestore = b
         }
     }
 
@@ -184,13 +195,32 @@ fun main() = application {
                         selectedBackup = selectedBackup,
                         onBackup = ::doBackup,
                         onSelectBackup = { selectedBackup = it },
-                        onRestore = ::doRestore,
+                        onRestore = { selectedBackup?.let(::requestRestore) },
                         modifier = Modifier.weight(1f).fillMaxHeight(),
                     )
                 }
             }
         }
         if (showAbout) AboutDialog { showAbout = false }
+        pendingRestore?.let { b ->
+            ConsentDialog(onChoice = { choice ->
+                pendingRestore = null
+                when (choice) {
+                    RestoreChoice.PROCEED -> doRestore(b)
+                    RestoreChoice.BACKUP_THEN_RESTORE -> {
+                        val p = selected
+                        if (p != null) {
+                            scope.launch(Dispatchers.IO) {
+                                runCatching { BackupEngine.backup(p.settings) }
+                                runCatching { BackupEngine.restore(b, p.settings) }
+                                reloadDetails(p)
+                            }
+                        }
+                    }
+                    RestoreChoice.CANCEL -> {}
+                }
+            })
+        }
     }
 
     LaunchedEffect(Unit) {

@@ -196,7 +196,7 @@ fun DetailsPanel(
 }
 
 @Composable
-fun GradientButton(text: String, enabled: Boolean = true, onClick: () -> Unit) {
+fun GradientButton(text: String, enabled: Boolean = true, modifier: Modifier = Modifier, onClick: () -> Unit) {
     Button(
         onClick = onClick,
         enabled = enabled,
@@ -207,7 +207,7 @@ fun GradientButton(text: String, enabled: Boolean = true, onClick: () -> Unit) {
             disabledContainerColor = Color.Transparent,
             disabledContentColor = Theme.textDim,
         ),
-        modifier = Modifier.background(if (enabled) Theme.accentGradient else Theme.clearGradient, Theme.buttonShape),
+        modifier = modifier.background(if (enabled) Theme.accentGradient else Theme.clearGradient, Theme.buttonShape),
     ) {
         Text(text, fontSize = 13.sp)
     }

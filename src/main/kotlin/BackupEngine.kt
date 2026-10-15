@@ -38,3 +38,17 @@ object BackupEngine {
         Files.copy(backup, target, StandardCopyOption.REPLACE_EXISTING)
     }
 }
+
+/** User's answer to the R6 consent dialog (CANCEL aborts). */
+enum class RestoreChoice { PROCEED, BACKUP_THEN_RESTORE, CANCEL }
+
+/**
+ * null means: current file exists but has no backups yet, so the app must
+ * ask for consent before overwriting it (requirement 6). Otherwise restore
+ * is safe to run directly.
+ */
+fun decideRestore(current: java.nio.file.Path): RestoreChoice? = when {
+    !Files.exists(current) -> RestoreChoice.PROCEED
+    BackupEngine.listBackups(current).isEmpty() -> null
+    else -> RestoreChoice.PROCEED
+}
