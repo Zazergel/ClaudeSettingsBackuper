@@ -1,6 +1,7 @@
 package ui
 
 import app.Project
+import androidx.compose.foundation.VerticalScrollbar
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.horizontalScroll
@@ -18,7 +19,9 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.rememberScrollbarAdapter
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
@@ -99,7 +102,13 @@ fun ProjectList(
                     color = Theme.textDim, fontSize = 13.sp,
                 )
             } else {
-                LazyColumn(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                val listState = rememberLazyListState()
+                Box(Modifier.fillMaxSize()) {
+                    LazyColumn(
+                        state = listState,
+                        modifier = Modifier.fillMaxSize().padding(end = 12.dp),
+                        verticalArrangement = Arrangement.spacedBy(4.dp),
+                    ) {
                     items(projects, key = { it.root.toString() }) { project ->
                         val isSelected = project == selected
                         Column(
@@ -125,6 +134,11 @@ fun ProjectList(
                             )
                         }
                     }
+                    }
+                    VerticalScrollbar(
+                        rememberScrollbarAdapter(listState),
+                        Modifier.align(Alignment.CenterEnd).fillMaxHeight(),
+                    )
                 }
             }
         }
@@ -143,7 +157,9 @@ fun DetailsPanel(
     modifier: Modifier = Modifier,
 ) {
     Card(modifier, shape = Theme.cardShape, colors = CardDefaults.cardColors(containerColor = Theme.card)) {
-        Column(Modifier.fillMaxSize().padding(16.dp).verticalScroll(rememberScrollState())) {
+        val scrollState = rememberScrollState()
+        Box(Modifier.fillMaxSize()) {
+            Column(Modifier.fillMaxSize().verticalScroll(scrollState).padding(16.dp)) {
             if (project == null) {
                 Text("Выберите проект слева", color = Theme.textDim, fontSize = 14.sp)
                 return@Column
@@ -192,6 +208,11 @@ fun DetailsPanel(
             }
             Spacer(Modifier.height(12.dp))
             GradientButton("Восстановить", enabled = selectedBackup != null, onClick = onRestore)
+            }
+            VerticalScrollbar(
+                rememberScrollbarAdapter(scrollState),
+                Modifier.align(Alignment.CenterEnd).fillMaxHeight().padding(end = 2.dp),
+            )
         }
     }
 }
