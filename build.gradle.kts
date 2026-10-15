@@ -28,6 +28,6 @@ tasks.withType<Test> {
 
 compose.desktop {
     application {
-        mainClass = "MainKt"
+        mainClass = "app.MainKt"
     }
 }
