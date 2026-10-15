@@ -1,26 +1,10 @@
 package app
 
 import androidx.compose.foundation.background
-import androidx.compose.foundation.layout.Arrangement
-import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.Row
-import androidx.compose.foundation.layout.Spacer
-import androidx.compose.foundation.layout.fillMaxHeight
-import androidx.compose.foundation.layout.fillMaxSize
-import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.*
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Text
-import androidx.compose.runtime.Composable
-import androidx.compose.runtime.LaunchedEffect
-import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableStateListOf
-import androidx.compose.runtime.mutableStateOf
-import androidx.compose.runtime.remember
-import androidx.compose.runtime.rememberCoroutineScope
-import androidx.compose.runtime.setValue
+import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.TextStyle
@@ -34,15 +18,7 @@ import androidx.compose.ui.window.application
 import androidx.compose.ui.window.rememberWindowState
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
-import ui.AboutDialog
-import ui.AppTheme
-import ui.ConsentDialog
-import ui.CurrentInfo
-import ui.DetailsPanel
-import ui.HiddenDialog
-import ui.ProjectList
-import ui.RootsBar
-import ui.Theme
+import ui.*
 import java.nio.file.Files
 import java.nio.file.Path
 import java.time.LocalDateTime
@@ -64,6 +40,7 @@ fun main() = application {
     var scanning by remember { mutableStateOf(false) }
     var showAbout by remember { mutableStateOf(false) }
     var showHidden by remember { mutableStateOf(false) }
+    var editTarget by remember { mutableStateOf<Path?>(null) }
     var pendingRestore by remember { mutableStateOf<Path?>(null) }
 
     fun reloadDetails(p: Project?) {
@@ -136,10 +113,10 @@ fun main() = application {
         }
     }
 
-    fun doBackup() {
+    fun doBackup(label: String) {
         val p = selected ?: return
         scope.launch(Dispatchers.IO) {
-            runCatching { BackupEngine.backup(p.settings) }
+            runCatching { BackupEngine.backup(p.settings, label = label) }
             reloadDetails(p)
         }
     }
@@ -148,6 +125,21 @@ fun main() = application {
         val p = selected ?: return
         scope.launch(Dispatchers.IO) {
             runCatching { BackupEngine.restore(b, p.settings) }
+            reloadDetails(p)
+        }
+    }
+
+    fun doSave(f: Path, text: String) {
+        scope.launch(Dispatchers.IO) {
+            runCatching { Files.writeString(f, text) }
+            if (selected?.settings == f) reloadDetails(selected)
+        }
+    }
+
+    fun doDelete(b: Path) {
+        val p = selected ?: return
+        scope.launch(Dispatchers.IO) {
+            runCatching { BackupEngine.delete(b) }
             reloadDetails(p)
         }
     }
@@ -209,7 +201,6 @@ fun main() = application {
                         scanning = scanning,
                         onSelect = ::reloadDetails,
                         onHide = ::hideProject,
-                        hiddenCount = hidden.size,
                         modifier = Modifier.width(340.dp).fillMaxHeight(),
                     )
                     DetailsPanel(
@@ -220,6 +211,8 @@ fun main() = application {
                         onBackup = ::doBackup,
                         onSelectBackup = { selectedBackup = it },
                         onRestore = { selectedBackup?.let(::requestRestore) },
+                        onEdit = { editTarget = it },
+                        onDelete = ::doDelete,
                         modifier = Modifier.weight(1f).fillMaxHeight(),
                     )
                 }
@@ -231,6 +224,9 @@ fun main() = application {
             onRestore = ::unhideProject,
             onClose = { showHidden = false },
         )
+        editTarget?.let { target ->
+            EditDialog(path = target, onSave = ::doSave, onClose = { editTarget = null })
+        }
         pendingRestore?.let { b ->
             ConsentDialog(onChoice = { choice ->
                 pendingRestore = null

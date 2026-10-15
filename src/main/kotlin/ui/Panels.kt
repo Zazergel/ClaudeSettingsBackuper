@@ -2,52 +2,31 @@ package ui
 
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.tween
-import androidx.compose.foundation.hoverable
+import androidx.compose.foundation.*
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.interaction.collectIsHoveredAsState
-import androidx.compose.ui.draw.clip
-import androidx.compose.ui.draw.drawWithContent
-import androidx.compose.ui.graphics.Shape
-import app.Project
-import androidx.compose.foundation.VerticalScrollbar
-import androidx.compose.foundation.background
-import androidx.compose.foundation.clickable
-import androidx.compose.foundation.horizontalScroll
-import androidx.compose.foundation.layout.Arrangement
-import androidx.compose.foundation.layout.Box
-import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.Row
-import androidx.compose.foundation.layout.Spacer
-import androidx.compose.foundation.layout.fillMaxHeight
-import androidx.compose.foundation.layout.fillMaxSize
-import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.height
-import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.layout.width
-import androidx.compose.foundation.layout.widthIn
+import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.rememberLazyListState
-import androidx.compose.foundation.rememberScrollState
-import androidx.compose.foundation.rememberScrollbarAdapter
-import androidx.compose.foundation.verticalScroll
-import androidx.compose.material3.Card
-import androidx.compose.material3.CardDefaults
-import androidx.compose.material3.CircularProgressIndicator
-import androidx.compose.material3.Text
-import androidx.compose.runtime.Composable
-import androidx.compose.runtime.getValue
-import androidx.compose.runtime.remember
+import androidx.compose.material3.*
+import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.drawWithContent
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.Shape
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.unit.DpSize
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import androidx.compose.ui.window.Dialog
+import androidx.compose.ui.window.DialogWindow
+import androidx.compose.ui.window.rememberDialogState
+import app.Project
+import java.nio.file.Files
 import java.nio.file.Path
 import java.time.LocalDateTime
 import java.time.format.DateTimeFormatter
@@ -86,7 +65,11 @@ fun RootsBar(roots: List<Path>, onAdd: () -> Unit, onRemove: (Path) -> Unit) {
                 }
             }
         }
-        GradientButton("+ Добавить", onClick = onAdd)
+        Text(
+            "+ Добавить",
+            color = Theme.accent, fontSize = 13.sp,
+            modifier = Modifier.hoverClick(Theme.chipShape) { onAdd() }.padding(horizontal = 6.dp, vertical = 4.dp),
+        )
     }
 }
 
@@ -97,7 +80,6 @@ fun ProjectList(
     scanning: Boolean,
     onSelect: (Project) -> Unit,
     onHide: (Project) -> Unit = {},
-    hiddenCount: Int = 0,
     modifier: Modifier = Modifier,
 ) {
     Card(modifier, shape = Theme.cardShape, colors = CardDefaults.cardColors(containerColor = Theme.card)) {
@@ -107,13 +89,6 @@ fun ProjectList(
                 if (scanning) CircularProgressIndicator(Modifier.size(16.dp), color = Theme.accent, strokeWidth = 2.dp)
             }
             Spacer(Modifier.height(8.dp))
-            if (hiddenCount > 0) {
-                Text(
-                    "Скрыто проектов: " + hiddenCount + " (Файл -> Скрытые проекты)",
-                    color = Theme.textDim, fontSize = 11.sp,
-                )
-                Spacer(Modifier.height(4.dp))
-            }
             if (projects.isEmpty()) {
                 Text(
                     if (scanning) "Сканирую" else "Проекты не найдены. Добавьте папку сканирования.",
@@ -176,6 +151,7 @@ fun ProjectList(
                     VerticalScrollbar(
                         rememberScrollbarAdapter(listState),
                         Modifier.align(Alignment.CenterEnd).fillMaxHeight(),
+                        style = AppScrollbarStyle(),
                     )
                 }
             }
@@ -189,68 +165,194 @@ fun DetailsPanel(
     current: CurrentInfo?,
     backups: List<Path>,
     selectedBackup: Path?,
-    onBackup: () -> Unit,
+    onBackup: (String) -> Unit,
     onSelectBackup: (Path?) -> Unit,
     onRestore: () -> Unit,
+    onEdit: (Path) -> Unit,
+    onDelete: (Path) -> Unit,
     modifier: Modifier = Modifier,
 ) {
+    var label by remember { mutableStateOf("") }
+    var pendingDelete by remember { mutableStateOf<Path?>(null) }
     Card(modifier, shape = Theme.cardShape, colors = CardDefaults.cardColors(containerColor = Theme.card)) {
         val scrollState = rememberScrollState()
         Box(Modifier.fillMaxSize()) {
             Column(Modifier.fillMaxSize().verticalScroll(scrollState).padding(16.dp)) {
-            if (project == null) {
-                Text("Выберите проект слева", color = Theme.textDim, fontSize = 14.sp)
-                return@Column
-            }
-            Text(
-                project.root.fileName.toString(),
-                color = Theme.text, fontSize = 18.sp, fontWeight = FontWeight.SemiBold,
-            )
-            Text(project.settings.toString(), color = Theme.textDim, fontSize = 12.sp)
-            Spacer(Modifier.height(12.dp))
-
-            if (current?.exists == true) {
-                Text(
-                    "Текущий файл: " + "%,d".format(current.size) + " Б, изменён " + current.mtime.format(MTIME_FMT),
-                    color = Theme.ok, fontSize = 13.sp,
-                )
-            } else {
-                Text("settings.json отсутствует", color = Theme.warn, fontSize = 13.sp)
-            }
-            Spacer(Modifier.height(12.dp))
-            GradientButton("Создать бекап", enabled = current?.exists == true, onClick = onBackup)
-            Spacer(Modifier.height(16.dp))
-            Text("Бекапы (" + backups.size + ")", color = Theme.text, fontWeight = FontWeight.SemiBold, fontSize = 14.sp)
-            Spacer(Modifier.height(6.dp))
-            if (backups.isEmpty()) {
-                Text("Бекапов пока нет", color = Theme.textDim, fontSize = 13.sp)
-            }
-            backups.forEach { backup ->
-                val isSelected = backup == selectedBackup
-                Row(
-                    Modifier
-                        .fillMaxWidth()
-                        .background(
-                            if (isSelected) Theme.selectedGradient else Theme.clearGradient,
-                            Theme.chipShape,
-                        )
-                        .hoverClick(Theme.chipShape) { onSelectBackup(if (isSelected) null else backup) }
-                        .padding(horizontal = 8.dp, vertical = 6.dp),
-                ) {
-                    Text(
-                        backup.fileName.toString().removePrefix("settings.json."),
-                        color = if (isSelected) Theme.accent2 else Theme.textDim,
-                        fontSize = 12.sp,
-                    )
+                if (project == null) {
+                    Text("Выберите проект слева", color = Theme.textDim, fontSize = 14.sp)
+                    return@Column
                 }
-            }
-            Spacer(Modifier.height(12.dp))
-            GradientButton("Восстановить", enabled = selectedBackup != null, onClick = onRestore)
+                Text(
+                    project.root.fileName.toString(),
+                    color = Theme.text, fontSize = 18.sp, fontWeight = FontWeight.SemiBold,
+                )
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Text(
+                        project.settings.toString(),
+                        color = Theme.textDim, fontSize = 12.sp,
+                        maxLines = 1, overflow = TextOverflow.Ellipsis,
+                        modifier = Modifier.weight(1f),
+                    )
+                    Spacer(Modifier.width(8.dp))
+                    GradientButton("Изменить конфиг") { onEdit(project.settings) }
+                }
+                Spacer(Modifier.height(12.dp))
+
+                if (current?.exists == true) {
+                    Text(
+                        "Текущий файл: " + "%,d".format(current.size) + " Б, изменён " + current.mtime.format(MTIME_FMT),
+                        color = Theme.ok, fontSize = 13.sp,
+                    )
+                } else {
+                    Text("settings.json отсутствует", color = Theme.warn, fontSize = 13.sp)
+                }
+                Spacer(Modifier.height(12.dp))
+                Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    OutlinedTextField(
+                        value = label,
+                        onValueChange = { label = it },
+                        placeholder = { Text("Пометка (необязательно)", color = Theme.textDim, fontSize = 12.sp) },
+                        singleLine = true,
+                        textStyle = TextStyle(color = Theme.text, fontSize = 13.sp),
+                        modifier = Modifier.weight(1f),
+                    )
+                    GradientButton("Создать бекап", enabled = current?.exists == true) { onBackup(label); label = "" }
+                }
+                Spacer(Modifier.height(16.dp))
+                Text("Бекапы (" + backups.size + ")", color = Theme.text, fontWeight = FontWeight.SemiBold, fontSize = 14.sp)
+                Spacer(Modifier.height(6.dp))
+                if (backups.isEmpty()) {
+                    Text("Бекапов пока нет", color = Theme.textDim, fontSize = 13.sp)
+                }
+                backups.forEach { backup ->
+                    val isSelected = backup == selectedBackup
+                    Row(
+                        Modifier
+                            .fillMaxWidth()
+                            .background(
+                                if (isSelected) Theme.selectedGradient else Theme.clearGradient,
+                                Theme.chipShape,
+                            )
+                            .hoverClick(Theme.chipShape) { onSelectBackup(if (isSelected) null else backup) }
+                            .padding(horizontal = 8.dp, vertical = 6.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                    ) {
+                        Text(
+                            backup.fileName.toString().removePrefix("settings.json."),
+                            color = if (isSelected) Theme.accent2 else Theme.textDim,
+                            fontSize = 12.sp, maxLines = 1, overflow = TextOverflow.Ellipsis,
+                            modifier = Modifier.weight(1f),
+                        )
+                        if (isSelected) {
+                            GradientButton("Восстановить", onClick = onRestore)
+                            Spacer(Modifier.width(6.dp))
+                            Text(
+                                "Изменить",
+                                color = Theme.accent, fontSize = 12.sp,
+                                modifier = Modifier.hoverClick(Theme.chipShape) { onEdit(backup) }
+                                    .padding(horizontal = 4.dp, vertical = 4.dp),
+                            )
+                            Spacer(Modifier.width(6.dp))
+                            Text(
+                                "Удалить",
+                                color = Theme.danger, fontSize = 12.sp,
+                                modifier = Modifier.hoverClick(Theme.chipShape) { pendingDelete = backup }
+                                    .padding(horizontal = 4.dp, vertical = 4.dp),
+                            )
+                        }
+                    }
+                }
             }
             VerticalScrollbar(
                 rememberScrollbarAdapter(scrollState),
                 Modifier.align(Alignment.CenterEnd).fillMaxHeight().padding(end = 2.dp),
+                style = AppScrollbarStyle(),
             )
+        }
+    }
+    pendingDelete?.let { backup ->
+        DeleteConfirmDialog(
+            backup = backup,
+            onConfirm = { onDelete(backup); pendingDelete = null },
+            onClose = { pendingDelete = null },
+        )
+    }
+}
+
+/** Scrollbar visible on the dark background: dim thumb at rest, orange on hover. */
+@Composable
+fun AppScrollbarStyle(): ScrollbarStyle = ScrollbarStyle(
+    unhoverColor = Theme.textDim.copy(alpha = 0.45f),
+    hoverColor = Theme.accent,
+    thickness = 8.dp,
+    minimalHeight = 24.dp,
+    shape = Theme.buttonShape,
+    hoverDurationMillis = 300,
+)
+
+/** Irreversible action guard: deleting a backup loses that copy forever. */
+@Composable
+fun DeleteConfirmDialog(backup: Path, onConfirm: () -> Unit, onClose: () -> Unit) {
+    DialogWindow(onCloseRequest = onClose, title = "Удалить бекап", resizable = false) {
+        Box(Modifier.fillMaxSize().background(Theme.bg1)) {
+            Card(shape = Theme.cardShape, colors = CardDefaults.cardColors(containerColor = Theme.card)) {
+                Column(Modifier.padding(20.dp).width(320.dp)) {
+                    Text("Удалить бекап?", color = Theme.text, fontSize = 15.sp, fontWeight = FontWeight.SemiBold)
+                    Spacer(Modifier.height(6.dp))
+                    Text(
+                        backup.fileName.toString(),
+                        color = Theme.warn, fontSize = 12.sp, maxLines = 1, overflow = TextOverflow.Ellipsis,
+                    )
+                    Spacer(Modifier.height(14.dp))
+                    Row {
+                        GradientButton("Удалить", onClick = onConfirm)
+                        Spacer(Modifier.width(8.dp))
+                        GradientButton("Отмена", onClick = onClose)
+                    }
+                }
+            }
+        }
+    }
+}
+
+/** Editor window for one file: view and change its JSON; Save enabled while dirty. */
+@Composable
+fun EditDialog(path: Path, onSave: (Path, String) -> Unit, onClose: () -> Unit) {
+    var text by remember { mutableStateOf("") }
+    var saved by remember { mutableStateOf("") }
+    LaunchedEffect(path) {
+        text = runCatching { Files.readString(path) }.getOrDefault("")
+        saved = text
+    }
+    DialogWindow(
+        onCloseRequest = onClose,
+        title = "Редактирование: " + path.fileName,
+        state = rememberDialogState(size = DpSize(640.dp, 600.dp)),
+        resizable = true,
+    ) {
+        Box(Modifier.fillMaxSize().background(Theme.bg1)) {
+            Card(
+                Modifier.fillMaxSize().padding(16.dp),
+                shape = Theme.cardShape,
+                colors = CardDefaults.cardColors(containerColor = Theme.card),
+            ) {
+                Column(Modifier.fillMaxSize().padding(16.dp)) {
+                    Text(path.toString(), color = Theme.textDim, fontSize = 11.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                    Spacer(Modifier.height(8.dp))
+                    JsonEditor(text, { text = it }, Modifier.weight(1f).fillMaxWidth())
+                    Spacer(Modifier.height(8.dp))
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Text(
+                            if (text != saved) "Есть несохранённые изменения" else "",
+                            color = Theme.warn, fontSize = 12.sp,
+                            modifier = Modifier.weight(1f),
+                        )
+                        GradientButton("Сохранить", enabled = text != saved) { onSave(path, text); saved = text }
+                        Spacer(Modifier.width(8.dp))
+                        GradientButton("Закрыть", onClick = onClose)
+                    }
+                }
+            }
         }
     }
 }
@@ -295,7 +397,7 @@ fun GradientButton(text: String, enabled: Boolean = true, modifier: Modifier = M
 
 @Composable
 fun AboutDialog(onClose: () -> Unit) {
-    Dialog(onCloseRequest = onClose, title = "О программе", resizable = false) {
+    DialogWindow(onCloseRequest = onClose, title = "О программе", resizable = false) {
         Box(Modifier.fillMaxSize().background(Theme.bg1)) {
             Card(shape = Theme.cardShape, colors = CardDefaults.cardColors(containerColor = Theme.card)) {
                 Column(Modifier.padding(24.dp).width(360.dp), horizontalAlignment = Alignment.CenterHorizontally) {
@@ -305,11 +407,11 @@ fun AboutDialog(onClose: () -> Unit) {
                     )
                     Spacer(Modifier.height(8.dp))
                     Text(
-                        "Локальная утилита: находит проекты Claude Code, делает бекапы их settings.json и восстанавливает их.",
+                        "Ищет проекты Claude Code, позволяет создавать бекапы их settings.json, редактировать и восстанавливать их.",
                         color = Theme.textDim, fontSize = 13.sp,
                     )
                     Spacer(Modifier.height(4.dp))
-                    Text("Версия 0.1.0", color = Theme.textDim, fontSize = 12.sp)
+                    Text("Версия 0.2.0", color = Theme.textDim, fontSize = 12.sp)
                     Spacer(Modifier.height(16.dp))
                     GradientButton("OK", onClick = onClose)
                 }

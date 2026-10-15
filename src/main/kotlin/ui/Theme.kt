@@ -15,17 +15,18 @@ object Theme {
     val card = Color(0xFF18203A)
     val cardHover = Color(0xFF1E2947)
     val stroke = Color(0xFF2A3554)
-    val accent = Color(0xFF8B7CFF)
-    val accent2 = Color(0xFF4FC3F7)
+    val accent = Color(0xFFD97757)
+    val accent2 = Color(0xFFEDA366)
     val text = Color(0xFFE7EBF7)
     val textDim = Color(0xFF96A0BC)
     val ok = Color(0xFF6FDBA8)
     val warn = Color(0xFFFFC46B)
+    val danger = Color(0xFFE5534B)
 
     /** Smooth diagonal wash behind the whole window. */
     val background: Brush = Brush.linearGradient(listOf(bg0, bg1, Color(0xFF101730)))
     val accentGradient: Brush = Brush.linearGradient(listOf(accent, accent2))
-    val selectedGradient: Brush = Brush.linearGradient(listOf(Color(0xFF2A2455), Color(0xFF1C2A4E)))
+    val selectedGradient: Brush = Brush.linearGradient(listOf(Color(0xFF46281A), Color(0xFF3B2721)))
     val clearGradient: Brush = Brush.linearGradient(listOf(Color.Transparent, Color.Transparent))
 
     val cardShape = RoundedCornerShape(14.dp)

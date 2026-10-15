@@ -1,6 +1,6 @@
 package app
 
-import java.util.Base64
+import java.util.*
 import java.util.prefs.Preferences
 
 /** Persistence of scan roots and hidden projects via the JDK Preferences store (base64, one path per line). */
