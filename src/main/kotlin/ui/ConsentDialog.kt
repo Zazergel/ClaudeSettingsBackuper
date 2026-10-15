@@ -1,9 +1,12 @@
 package ui
 
+import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
@@ -26,8 +29,9 @@ import app.RestoreChoice
  */
 @Composable
 fun ConsentDialog(onChoice: (RestoreChoice) -> Unit) {
-    Dialog(onCloseRequest = { onChoice(RestoreChoice.CANCEL) }, title = "Внимание") {
-        Card(shape = Theme.cardShape, colors = CardDefaults.cardColors(containerColor = Theme.card)) {
+    Dialog(onCloseRequest = { onChoice(RestoreChoice.CANCEL) }, title = "Внимание", resizable = false) {
+        Box(Modifier.fillMaxSize().background(Theme.bg1)) {
+            Card(shape = Theme.cardShape, colors = CardDefaults.cardColors(containerColor = Theme.card)) {
             Column(Modifier.padding(24.dp).width(460.dp)) {
                 Text(
                     "Текущая конфигурация будет перезаписана. Вы уверены?",
@@ -49,6 +53,7 @@ fun ConsentDialog(onChoice: (RestoreChoice) -> Unit) {
                     GradientButton("Нет", onClick = { onChoice(RestoreChoice.CANCEL) }, modifier = Modifier.fillMaxWidth())
                 }
             }
+        }
         }
     }
 }

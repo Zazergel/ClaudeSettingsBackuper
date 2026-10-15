@@ -5,6 +5,7 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
@@ -215,22 +216,24 @@ fun GradientButton(text: String, enabled: Boolean = true, modifier: Modifier = M
 
 @Composable
 fun AboutDialog(onClose: () -> Unit) {
-    Dialog(onCloseRequest = onClose, title = "О программе") {
-        Card(shape = Theme.cardShape, colors = CardDefaults.cardColors(containerColor = Theme.card)) {
-            Column(Modifier.padding(24.dp).width(360.dp), horizontalAlignment = Alignment.CenterHorizontally) {
-                Text(
-                    "Claude Settings Backuper",
-                    style = TextStyle(brush = Theme.accentGradient, fontSize = 18.sp, fontWeight = FontWeight.SemiBold),
-                )
-                Spacer(Modifier.height(8.dp))
-                Text(
-                    "Локальная утилита: находит проекты Claude Code, делает бекапы их settings.json и восстанавливает их.",
-                    color = Theme.textDim, fontSize = 13.sp,
-                )
-                Spacer(Modifier.height(4.dp))
-                Text("Версия 0.1.0", color = Theme.textDim, fontSize = 12.sp)
-                Spacer(Modifier.height(16.dp))
-                GradientButton("OK", onClick = onClose)
+    Dialog(onCloseRequest = onClose, title = "О программе", resizable = false) {
+        Box(Modifier.fillMaxSize().background(Theme.bg1)) {
+            Card(shape = Theme.cardShape, colors = CardDefaults.cardColors(containerColor = Theme.card)) {
+                Column(Modifier.padding(24.dp).width(360.dp), horizontalAlignment = Alignment.CenterHorizontally) {
+                    Text(
+                        "Claude Settings Backuper",
+                        style = TextStyle(brush = Theme.accentGradient, fontSize = 18.sp, fontWeight = FontWeight.SemiBold),
+                    )
+                    Spacer(Modifier.height(8.dp))
+                    Text(
+                        "Локальная утилита: находит проекты Claude Code, делает бекапы их settings.json и восстанавливает их.",
+                        color = Theme.textDim, fontSize = 13.sp,
+                    )
+                    Spacer(Modifier.height(4.dp))
+                    Text("Версия 0.1.0", color = Theme.textDim, fontSize = 12.sp)
+                    Spacer(Modifier.height(16.dp))
+                    GradientButton("OK", onClick = onClose)
+                }
             }
         }
     }
