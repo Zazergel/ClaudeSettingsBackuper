@@ -1,3 +1,5 @@
+import org.jetbrains.compose.desktop.application.dsl.TargetFormat
+
 plugins {
     kotlin("jvm") version "2.4.21"
     kotlin("plugin.compose") version "2.4.21"
@@ -30,6 +32,8 @@ compose.desktop {
     application {
         mainClass = "app.MainKt"
         nativeDistributions {
+            targetFormats(TargetFormat.Msi)
+
             packageName = "ClaudeSettingsBackuper"
             packageVersion = project.version.toString()
             vendor = "Zazergel"
