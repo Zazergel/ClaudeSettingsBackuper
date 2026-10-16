@@ -4,8 +4,8 @@
   <p align="center">
      
    Локальное desktop-приложение: находит проекты Claude Code, делает бекапы их
-`settings.json`. Позволяет просматривать и править конфиги, а также безопасно
-восстанавливать их.
+`settings.json`. Позволяет просматривать\править конфиги, а также быстро и безопасно
+переключаться между ними.
     <br/>
     <p align="center">
     <a href="https://github.com/Zazergel/ClaudeSettingsBackuper/issues">Report Bug</a> *
