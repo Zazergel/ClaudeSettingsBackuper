@@ -29,5 +29,22 @@ tasks.withType<Test> {
 compose.desktop {
     application {
         mainClass = "app.MainKt"
+        nativeDistributions {
+            packageName = "ClaudeSettingsBackuper"
+            packageVersion = project.version.toString()
+            vendor = "Zazergel"
+
+            linux {
+                iconFile.set(rootProject.file("icon.png"))
+            }
+            windows {
+                iconFile.set(rootProject.file("icon.ico"))
+                upgradeUuid = "e2f4a1c7-9b3d-4e68-a57c-0d82f61b93a4"
+                perUserInstall = true
+                dirChooser = true
+                menu = true
+                shortcut = true
+            }
+        }
     }
 }
