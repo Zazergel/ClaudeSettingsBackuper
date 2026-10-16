@@ -22,6 +22,7 @@
 
 # Claude Settings Backuper
 
+[All Releases](https://github.com/Zazergel/ClaudeSettingsBackuper/releases)
 
 ## Возможности
 
