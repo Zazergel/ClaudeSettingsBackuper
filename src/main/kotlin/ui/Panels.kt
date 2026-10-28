@@ -25,7 +25,14 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.window.DialogWindow
 import androidx.compose.ui.window.rememberDialogState
+import app.Diagnostic
+import app.JsonNode
+import app.Prefs
 import app.Project
+import app.Severity
+import app.parseJson
+import app.validateConfig
+import app.writeJson
 import java.nio.file.Files
 import java.nio.file.Path
 import java.time.LocalDateTime
@@ -70,6 +77,59 @@ fun RootsBar(roots: List<Path>, onAdd: () -> Unit, onRemove: (Path) -> Unit) {
             color = Theme.accent, fontSize = 13.sp,
             modifier = Modifier.hoverClick(Theme.chipShape) { onAdd() }.padding(horizontal = 6.dp, vertical = 4.dp),
         )
+    }
+}
+
+/** Конфликт снапшота: конфиг изменён извне; hasBackup — доступен ли последний бекап для восстановления. */
+data class SnapshotConflict(val project: Project, val hasBackup: Boolean)
+
+/** Состояние конфигов после запуска: изменённые извне (с действиями) и невалидные (без действий). */
+@Composable
+fun SnapshotBanner(
+    conflicts: List<SnapshotConflict>,
+    invalid: List<Project>,
+    onShowDiff: (Project) -> Unit,
+    onAccept: (Project) -> Unit,
+    onRestore: (Project) -> Unit,
+) {
+    if (conflicts.isEmpty() && invalid.isEmpty()) return
+    Column(Modifier.fillMaxWidth().padding(horizontal = 16.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+        conflicts.forEach { c ->
+            Row(
+                Modifier
+                    .fillMaxWidth()
+                    .background(Theme.card, Theme.chipShape)
+                    .padding(start = 10.dp, top = 4.dp, bottom = 4.dp, end = 6.dp),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                Text(
+                    "⚠ «${c.project.root.fileName}»: конфиг изменён извне",
+                    color = Theme.warn, fontSize = 12.sp,
+                    maxLines = 1, overflow = TextOverflow.Ellipsis,
+                    modifier = Modifier.weight(1f),
+                )
+                GradientButton("Изменения", onClick = { onShowDiff(c.project) })
+                Spacer(Modifier.width(6.dp))
+                GradientButton("Принять", onClick = { onAccept(c.project) })
+                Spacer(Modifier.width(6.dp))
+                GradientButton("Восстановить", enabled = c.hasBackup, onClick = { onRestore(c.project) })
+            }
+        }
+        invalid.forEach { p ->
+            Row(
+                Modifier
+                    .fillMaxWidth()
+                    .background(Theme.card, Theme.chipShape)
+                    .padding(horizontal = 10.dp, vertical = 6.dp),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                Text(
+                    "✕ «${p.root.fileName}»: settings.json — невалидный JSON, исправьте в редакторе",
+                    color = Theme.danger, fontSize = 12.sp,
+                    maxLines = 1, overflow = TextOverflow.Ellipsis,
+                )
+            }
+        }
     }
 }
 
@@ -315,20 +375,39 @@ fun DeleteConfirmDialog(backup: Path, onConfirm: () -> Unit, onClose: () -> Unit
     }
 }
 
-/** Editor window for one file: view and change its JSON; Save enabled while dirty. */
+/** Editor window for one file: Save needs a dirty document and zero ERROR diagnostics. */
 @Composable
 fun EditDialog(path: Path, onSave: (Path, String) -> Unit, onClose: () -> Unit) {
     var text by remember { mutableStateOf("") }
     var saved by remember { mutableStateOf("") }
+    var revealLine by remember { mutableStateOf<Int?>(null) }
+    var revealTick by remember { mutableStateOf(0) }
+    var mode by remember { mutableStateOf(EditorMode.FORM) } // UI-режим по умолчанию
+    // «Скрыть» — на сессию диалога, «Доверять» — навсегда (Prefs). ID доверия — точный текст предупреждения:
+    // у валидатора нет стабильных ключей. ponytail: смена формулировок сбрасывает доверие, одинаковые
+    // дубликаты доверятся вместе, бюджет Prefs ~8КБ — переезд в файл, если перерастём
+    val hidden = remember { mutableStateSetOf<String>() }
+    val trusted = remember { mutableStateSetOf<String>().apply { addAll(Prefs.loadTrustedWarnings()) } }
+    var showHidden by remember { mutableStateOf(false) }
+    var showTrusted by remember { mutableStateOf(false) }
     LaunchedEffect(path) {
         text = runCatching { Files.readString(path) }.getOrDefault("")
         saved = text
     }
+    val diagnostics = remember(text) { validateConfig(text) }
+    val errors = diagnostics.filter { it.severity == Severity.ERROR }
+    val warnings = diagnostics.filter { it.severity == Severity.WARNING }
+    // счёт по живым совпадениям, не по размеру множеств: устаревшие записи в hidden/trusted не считаются
+    val hiddenWarnings = warnings.filter { it.message in hidden }
+    val trustedWarnings = warnings.filter { it.message in trusted }
+    val visible = warnings.filter { it.message !in hidden && it.message !in trusted }
+    val canSave = text != saved && errors.isEmpty()
+    fun lineOf(d: Diagnostic) = text.take(d.offset).count { it == '\n' } + 1
     DialogWindow(
         onCloseRequest = onClose,
         title = "Редактирование: " + path.fileName,
-        state = rememberDialogState(size = DpSize(640.dp, 600.dp)),
-        resizable = true,
+        state = rememberDialogState(size = DpSize(760.dp, 660.dp)),
+        resizable = false, // #E215: у DialogWindow нет minimumSize — фиксированный размер вместо ломающегося ресайза
     ) {
         Box(Modifier.fillMaxSize().background(Theme.bg1)) {
             Card(
@@ -337,9 +416,147 @@ fun EditDialog(path: Path, onSave: (Path, String) -> Unit, onClose: () -> Unit) 
                 colors = CardDefaults.cardColors(containerColor = Theme.card),
             ) {
                 Column(Modifier.fillMaxSize().padding(16.dp)) {
-                    Text(path.toString(), color = Theme.textDim, fontSize = 11.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                    // ponytail: parseJson здесь и внутри validateConfig — двойной разбор KB-файла на keystroke, дешево
+                    val parsed = remember(text) { parseJson(text) }
+                    val tree = parsed.root as? JsonNode.Obj
+                    val canForm = parsed.ok && tree != null
+                    // при невалидном JSON форма недоступна — показываем JSON-режим независимо от выбора
+                    val activeMode = if (mode == EditorMode.FORM && !canForm) EditorMode.JSON else mode
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Text(
+                            path.toString(), color = Theme.textDim, fontSize = 11.sp,
+                            maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.weight(1f),
+                        )
+                        Spacer(Modifier.width(8.dp))
+                        ModeSegment("Параметры", activeMode == EditorMode.FORM, canForm) { mode = EditorMode.FORM }
+                        ModeSegment("JSON", activeMode == EditorMode.JSON) { mode = EditorMode.JSON }
+                    }
                     Spacer(Modifier.height(8.dp))
-                    JsonEditor(text, { text = it }, Modifier.weight(1f).fillMaxWidth())
+                    if (activeMode == EditorMode.JSON) {
+                        JsonEditor(
+                            text, { text = it }, Modifier.weight(1f).fillMaxWidth(),
+                            problems = diagnostics, revealLine = revealLine, revealTick = revealTick,
+                        )
+                    } else if (tree != null) {
+                        ConfigForm(tree, { t -> text = writeJson(t) }, Modifier.weight(1f).fillMaxWidth())
+                    }
+                    Spacer(Modifier.height(8.dp))
+                    val statusColor = when {
+                        errors.isNotEmpty() -> Theme.danger
+                        warnings.isNotEmpty() -> Theme.warn
+                        text.isNotBlank() -> Theme.ok
+                        else -> Theme.textDim
+                    }
+                    Text(
+                        when {
+                            errors.isNotEmpty() -> "✕ " + errors.first().message
+                            visible.isNotEmpty() -> "⚠ Предупреждений: ${visible.size} — подробнее см. в режиме JSON"
+                            text.isNotBlank() -> "✓ JSON валиден"
+                            else -> " "
+                        },
+                        color = statusColor, fontSize = 12.sp, maxLines = 1, overflow = TextOverflow.Ellipsis,
+                    )
+                    if (diagnostics.isNotEmpty() && activeMode == EditorMode.JSON) {
+                        Spacer(Modifier.height(4.dp))
+                        Column(
+                            Modifier.heightIn(max = 140.dp).fillMaxWidth().verticalScroll(rememberScrollState()),
+                        ) {
+                            // ERROR-строки — без кнопок; скрытые/доверенные предупреждения скрыты (управление — в футерах ниже)
+                            diagnostics.forEach { d ->
+                                if (d.severity == Severity.ERROR) {
+                                    Text(
+                                        "Строка ${lineOf(d)}: ${d.message}",
+                                        color = Theme.danger, fontSize = 11.sp,
+                                        modifier = Modifier
+                                            .hoverClick(Theme.chipShape) { revealLine = lineOf(d) - 1; revealTick++ }
+                                            .padding(horizontal = 4.dp, vertical = 2.dp)
+                                            .fillMaxWidth(),
+                                    )
+                                } else if (d.message !in hidden && d.message !in trusted) {
+                                    Row(
+                                        Modifier.fillMaxWidth().padding(horizontal = 4.dp, vertical = 2.dp),
+                                        verticalAlignment = Alignment.CenterVertically,
+                                    ) {
+                                        Text(
+                                            "Строка ${lineOf(d)}: ${d.message}",
+                                            color = Theme.warn, fontSize = 11.sp,
+                                            modifier = Modifier
+                                                .weight(1f)
+                                                .hoverClick(Theme.chipShape) { revealLine = lineOf(d) - 1; revealTick++ },
+                                        )
+                                        Text(
+                                            "Скрыть", color = Theme.textDim, fontSize = 11.sp,
+                                            modifier = Modifier.hoverClick(Theme.chipShape) { hidden.add(d.message) }
+                                                .padding(horizontal = 4.dp, vertical = 2.dp),
+                                        )
+                                        Text(
+                                            "Доверять", color = Theme.accent, fontSize = 11.sp,
+                                            modifier = Modifier.hoverClick(Theme.chipShape) {
+                                                trusted.add(d.message)
+                                                Prefs.saveTrustedWarnings(trusted)
+                                            }.padding(horizontal = 4.dp, vertical = 2.dp),
+                                        )
+                                    }
+                                }
+                            }
+                            if (showHidden) hiddenWarnings.forEach { d ->
+                                Row(
+                                    Modifier.fillMaxWidth().padding(horizontal = 4.dp, vertical = 2.dp),
+                                    verticalAlignment = Alignment.CenterVertically,
+                                ) {
+                                    Text(
+                                        "Строка ${lineOf(d)}: ${d.message}",
+                                        color = Theme.textDim, fontSize = 11.sp,
+                                        modifier = Modifier
+                                            .weight(1f)
+                                            .hoverClick(Theme.chipShape) { revealLine = lineOf(d) - 1; revealTick++ },
+                                    )
+                                    Text(
+                                        "Вернуть", color = Theme.warn, fontSize = 11.sp,
+                                        modifier = Modifier.hoverClick(Theme.chipShape) { hidden.remove(d.message) }
+                                            .padding(horizontal = 4.dp, vertical = 2.dp),
+                                    )
+                                }
+                            }
+                            if (showTrusted) trustedWarnings.forEach { d ->
+                                Row(
+                                    Modifier.fillMaxWidth().padding(horizontal = 4.dp, vertical = 2.dp),
+                                    verticalAlignment = Alignment.CenterVertically,
+                                ) {
+                                    Text(
+                                        "✓ Строка ${lineOf(d)}: ${d.message}",
+                                        color = Theme.textDim, fontSize = 11.sp,
+                                        modifier = Modifier
+                                            .weight(1f)
+                                            .hoverClick(Theme.chipShape) { revealLine = lineOf(d) - 1; revealTick++ },
+                                    )
+                                    Text(
+                                        "Передумать", color = Theme.danger, fontSize = 11.sp,
+                                        modifier = Modifier.hoverClick(Theme.chipShape) {
+                                            trusted.remove(d.message)
+                                            Prefs.saveTrustedWarnings(trusted)
+                                        }.padding(horizontal = 4.dp, vertical = 2.dp),
+                                    )
+                                }
+                            }
+                            if (hiddenWarnings.isNotEmpty()) {
+                                Text(
+                                    "Скрытые: ${hiddenWarnings.size} — " + if (showHidden) "свернуть" else "показать",
+                                    color = Theme.textDim, fontSize = 11.sp,
+                                    modifier = Modifier.hoverClick(Theme.chipShape) { showHidden = !showHidden }
+                                        .padding(horizontal = 4.dp, vertical = 2.dp),
+                                )
+                            }
+                            if (trustedWarnings.isNotEmpty()) {
+                                Text(
+                                    "Доверенные: ${trustedWarnings.size} — " + if (showTrusted) "свернуть" else "показать",
+                                    color = Theme.textDim, fontSize = 11.sp,
+                                    modifier = Modifier.hoverClick(Theme.chipShape) { showTrusted = !showTrusted }
+                                        .padding(horizontal = 4.dp, vertical = 2.dp),
+                                )
+                            }
+                        }
+                    }
                     Spacer(Modifier.height(8.dp))
                     Row(verticalAlignment = Alignment.CenterVertically) {
                         Text(
@@ -347,7 +564,7 @@ fun EditDialog(path: Path, onSave: (Path, String) -> Unit, onClose: () -> Unit) 
                             color = Theme.warn, fontSize = 12.sp,
                             modifier = Modifier.weight(1f),
                         )
-                        GradientButton("Сохранить", enabled = text != saved) { onSave(path, text); saved = text }
+                        GradientButton("Сохранить", enabled = canSave) { onSave(path, text); saved = text }
                         Spacer(Modifier.width(8.dp))
                         GradientButton("Закрыть", onClick = onClose)
                     }
@@ -411,7 +628,7 @@ fun AboutDialog(onClose: () -> Unit) {
                         color = Theme.textDim, fontSize = 13.sp,
                     )
                     Spacer(Modifier.height(4.dp))
-                    Text("Версия 0.2.0", color = Theme.textDim, fontSize = 12.sp)
+                    Text("Версия 0.3.0", color = Theme.textDim, fontSize = 12.sp)
                     Spacer(Modifier.height(16.dp))
                     GradientButton("OK", onClick = onClose)
                 }
