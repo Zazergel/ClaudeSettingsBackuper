@@ -13,6 +13,12 @@ object Prefs {
     fun loadHidden(): List<String> = loadList("hidden.projects")
     fun saveHidden(paths: List<String>) = saveList("hidden.projects", paths)
 
+    fun loadSnapshot(): Map<String, String> = decodeSnapshot(loadList("config.snapshot"))
+    fun saveSnapshot(snapshot: Map<String, String>) = saveList("config.snapshot", encodeSnapshot(snapshot))
+
+    fun loadTrustedWarnings(): Set<String> = loadList("trusted.warnings").toSet()
+    fun saveTrustedWarnings(trusted: Set<String>) = saveList("trusted.warnings", trusted.toList())
+
     private fun loadList(key: String): List<String> = runCatching {
         val raw = NODE.get(key, "")
         if (raw.isBlank()) emptyList()
